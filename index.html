@@ -623,11 +623,6 @@ function render(){
     ${renderBrandbar()}
     ${renderTabnav()}
     <div id="view-slot">${renderCurrentView()}</div>
-    <div class="footnote">
-      ข้อมูลใบหน้า (descriptor) รูปถ่าย และประวัติเช็คอิน จัดเก็บบน Firebase Firestore (ฐานข้อมูลกลางบนคลาวด์) จึงเห็นข้อมูลชุดเดียวกันได้จากทุกอุปกรณ์/จุดสแกนแบบเรียลไทม์<br>
-      การเข้าสู่ระบบใช้ Firebase Authentication ตรวจสอบฝั่งเซิร์ฟเวอร์จริง — ผู้ดูแลระบบสร้าง/ลบผู้ใช้ได้ที่ Firebase Console → Authentication → Users และควรตั้ง Firestore Security Rules ให้ต้อง <code>request.auth != null</code> ก่อนอ่าน/เขียนได้ (ดูตัวอย่างกฎในคอมเมนต์ firebaseConfig)<br>
-      ยังแนะนำกดปุ่ม "ส่งออกข้อมูล (Excel)" ในหน้าฐานข้อมูลเป็นประจำเพื่อสำรองข้อมูลไว้เผื่อกรณีฉุกเฉิน
-    </div>
   `;
   refreshModelChip();
   refreshStorageChip();
@@ -708,10 +703,6 @@ function renderLogin(){
         <button class="btn-link" type="button" onclick="forgotPassword()">ลืมรหัสผ่าน?</button>
       </div>
       <div style="display:flex;justify-content:center;gap:8px;margin-top:14px;flex-wrap:wrap;">${modelChipHtml()}${storageChipHtml()}</div>
-      <div class="hint-box">
-        ระบบนี้ใช้ Firebase Authentication ยืนยันตัวตนจริง (ตรวจสอบฝั่งเซิร์ฟเวอร์ของ Google ไม่มีรหัสผ่านฝังอยู่ในโค้ด)<br>
-        ผู้ดูแลระบบสร้างบัญชีผู้ใช้ได้ที่ Firebase Console → Authentication → Users → Add user
-      </div>
     </div>
   </div>`;
 }
