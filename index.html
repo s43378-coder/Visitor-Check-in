@@ -174,6 +174,9 @@ body{
 .pill-matched{background:rgba(63,211,152,.18);color:var(--green);backdrop-filter:blur(4px);}
 .pill-nomatch{background:rgba(255,184,77,.18);color:var(--amber);backdrop-filter:blur(4px);}
 .pill-logged{background:rgba(63,211,152,.18);color:var(--green);}
+.pill-logged-out{background:rgba(255,184,77,.18);color:var(--amber);}
+.pill-in{background:rgba(63,211,152,.18);color:var(--green);backdrop-filter:blur(4px);}
+.pill-out{background:rgba(255,107,87,.16);color:var(--red);backdrop-filter:blur(4px);}
 
 .match-list{max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-top:10px;}
 .match-row{display:flex;align-items:center;gap:12px;background:var(--bg-panel-raised);border:1px solid var(--line);padding:10px 12px;border-radius:10px;cursor:pointer;}
@@ -292,7 +295,7 @@ const S = {
   scanStatus:'idle',      // idle | matched | nomatch | logged
   selectedMatchId:null,
   manualSearch:'', scanVisitReason:'',
-  scanRegError:'', scanRegStatusOther:false,
+  scanRegError:'', scanRegStatusOther:false, scanLoggedType:null,
 
   // database view
   dbTab:'users', dbSearch:'', dbDateFilter:''
@@ -472,6 +475,14 @@ function rebuildMatcher(){
   S.faceMatcher = new faceapi.FaceMatcher(labeled, MATCH_THRESHOLD);
 }
 
+/* ---- เข้า/ออก สลับอัตโนมัติ: ดูรายการล่าสุดของคนนั้นแล้วสลับสถานะ (ไม่มีประวัติ/ล่าสุดคือ "ออก" -> ครั้งนี้ "เข้า", ล่าสุดคือ "เข้า" -> ครั้งนี้ "ออก") ---- */
+function getNextLogType(visitorId){
+  const last = S.history.find(h=>h.visitorId===visitorId);
+  if(!last || last.type==='OUT') return 'IN';
+  return 'OUT';
+}
+function logTypeLabel(type){ return type==='OUT' ? 'ออก' : 'เข้า'; }
+
 /* ---- scan view detection loop ---- */
 async function scanLoopTick(){
   const video = document.getElementById('video-scan');
@@ -486,10 +497,12 @@ async function scanLoopTick(){
     const best = S.faceMatcher.findBestMatch(result.descriptor);
     if(best.label !== 'unknown'){
       const v = S.visitors.find(x=>x.id===best.label);
+      const nextType = v ? getNextLogType(v.id) : 'IN';
+      const isOut = nextType==='OUT';
       label = v ? v.name : 'พบข้อมูล';
-      color = '#3fd398';
-      badgeText = `ตรวจพบ: ${v ? v.name : 'ทราบตัวตน'}`;
-      badgeClass = 'status-pill pill-matched';
+      color = isOut ? '#ff6b57' : '#3fd398';
+      badgeText = v ? `${v.name} • จะบันทึก${logTypeLabel(nextType)}` : 'พบข้อมูล';
+      badgeClass = isOut ? 'status-pill pill-out' : 'status-pill pill-in';
     } else {
       label='ไม่รู้จัก'; color='#ffb84d';
       badgeText='พบใบหน้า • ไม่พบในฐานข้อมูล'; badgeClass='status-pill pill-nomatch';
@@ -524,7 +537,7 @@ function resetViewState(view){
   if(view==='scan'){
     S.scanCaptured=null; S.scanStatus='idle'; S.scanLive=null;
     S.selectedMatchId=null; S.manualSearch=''; S.scanVisitReason='';
-    S.scanRegError=''; S.scanRegStatusOther=false;
+    S.scanRegError=''; S.scanRegStatusOther=false; S.scanLoggedType=null;
   }
 }
 function logout(){
@@ -762,9 +775,19 @@ function refreshScanOnly(){
 
 function renderStatusPill(){
   if(S.scanStatus==='idle') return `<span class="status-pill pill-scanning">กำลังสแกนสด</span>`;
-  if(S.scanStatus==='matched') return `<span class="status-pill pill-matched">พบข้อมูลตรงกัน</span>`;
+  if(S.scanStatus==='matched'){
+    const m = S.visitors.find(u=>u.id===S.selectedMatchId);
+    const nextType = m ? getNextLogType(m.id) : 'IN';
+    return nextType==='OUT'
+      ? `<span class="status-pill pill-out">พบข้อมูลตรงกัน • จะบันทึกออก</span>`
+      : `<span class="status-pill pill-in">พบข้อมูลตรงกัน • จะบันทึกเข้า</span>`;
+  }
   if(S.scanStatus==='nomatch') return `<span class="status-pill pill-nomatch">ไม่พบในฐานข้อมูล</span>`;
-  if(S.scanStatus==='logged') return `<span class="status-pill pill-logged">บันทึกเข้าระบบแล้ว</span>`;
+  if(S.scanStatus==='logged'){
+    return S.scanLoggedType==='OUT'
+      ? `<span class="status-pill pill-logged-out">บันทึกออกแล้ว</span>`
+      : `<span class="status-pill pill-logged">บันทึกเข้าแล้ว</span>`;
+  }
   return '';
 }
 
@@ -775,6 +798,8 @@ function renderScanAction(){
   if(S.scanStatus==='matched'){
     const m = S.visitors.find(u=>u.id===S.selectedMatchId);
     if(!m) return renderNomatchPanel();
+    const nextType = getNextLogType(m.id);
+    const isOut = nextType==='OUT';
     return `
       <div class="panel" style="padding:16px; margin-top:14px; background:var(--bg-void);">
         <div style="display:flex; gap:12px; align-items:center;">
@@ -783,12 +808,13 @@ function renderScanAction(){
             <div style="font-weight:700; font-family:var(--font-display);">${esc(m.name)}</div>
             <div style="font-size:12.5px; color:var(--ink-dim);">${esc(m.status)}</div>
           </div>
+          <span class="status-pill ${isOut?'pill-out':'pill-in'}">จะบันทึก${logTypeLabel(nextType)}</span>
         </div>
         <div class="field" style="margin-top:14px; margin-bottom:0;">
           <label>เหตุผลในการเข้ามาครั้งนี้</label>
           <textarea id="scan-visit-reason" placeholder="เช่น มาติดต่อธุรการ / รับ-ส่งนักเรียน" oninput="S.scanVisitReason=this.value;">${esc(S.scanVisitReason)}</textarea>
         </div>
-        <button class="btn btn-primary" style="margin-top:14px;" onclick="confirmLog()">ยืนยันและบันทึกการเข้า-ออก</button>
+        <button class="btn ${isOut?'btn-danger':'btn-primary'}" style="margin-top:14px;" onclick="confirmLog()">ยืนยันบันทึก${logTypeLabel(nextType)}</button>
         <button class="btn-link" onclick="S.scanStatus='nomatch'; refreshScanOnly();">ผลไม่ถูกต้อง? ค้นหาด้วยตนเอง</button>
       </div>`;
   }
@@ -796,9 +822,10 @@ function renderScanAction(){
     return renderNomatchPanel();
   }
   if(S.scanStatus==='logged'){
+    const isOut = S.scanLoggedType==='OUT';
     return `
-      <div class="panel" style="padding:16px; margin-top:14px; background:var(--bg-void); border-color:var(--green);">
-        <p style="font-size:13.5px; color:var(--green); margin:0 0 12px; font-weight:600;">บันทึกข้อมูลเรียบร้อย</p>
+      <div class="panel" style="padding:16px; margin-top:14px; background:var(--bg-void); border-color:${isOut?'var(--amber)':'var(--green)'};">
+        <p style="font-size:13.5px; color:${isOut?'var(--amber)':'var(--green)'}; margin:0 0 12px; font-weight:600;">บันทึก${logTypeLabel(S.scanLoggedType||'IN')}แล้ว</p>
         <button class="btn btn-ghost" onclick="retryScan()">สแกนคนถัดไป</button>
       </div>`;
   }
@@ -898,7 +925,7 @@ async function submitInlineRegister(){
 
   const now = new Date();
   const entry = {
-    id: uid(), visitorId:rec.id, name:rec.name, status:rec.status, reason:rec.reason||'',
+    id: uid(), visitorId:rec.id, name:rec.name, status:rec.status, reason:rec.reason||'', type:'IN',
     photo: rec.photo,
     date: fmtDate(now), time: fmtTime(now), ts: now.getTime(),
     verifiedBy: S.username
@@ -913,10 +940,11 @@ async function submitInlineRegister(){
     return;
   }
   S.history.unshift(entry);
+  S.scanLoggedType = 'IN';
   S.scanStatus = 'logged';
   S.scanRegError=''; S.scanRegStatusOther=false;
   render();
-  toast('ลงทะเบียนและบันทึกการเข้าเรียบร้อย');
+  toast('ลงทะเบียนและบันทึกเข้าเรียบร้อย');
 }
 function pickManualMatch(id){ S.selectedMatchId = id; refreshScanOnly(); }
 function acceptManualMatch(){
@@ -960,13 +988,14 @@ async function retryScan(){
 async function confirmLog(){
   const m = S.visitors.find(u=>u.id===S.selectedMatchId);
   if(!m) return;
+  const type = getNextLogType(m.id);
   const recent = S.history.find(h => h.visitorId===m.id && (Date.now() - h.ts) < RECENT_LOG_WINDOW_MS);
-  if(recent && !confirm(`เพิ่งบันทึกรายการของ "${m.name}" ไปเมื่อไม่นานมานี้ ต้องการบันทึกซ้ำหรือไม่?`)) return;
+  if(recent && !confirm(`เพิ่งบันทึกรายการของ "${m.name}" ไปเมื่อไม่นานมานี้ ต้องการบันทึก${logTypeLabel(type)}ซ้ำหรือไม่?`)) return;
 
   const now = new Date();
   const visitReason = (S.scanVisitReason||'').trim() || m.reason || '';
   const entry = {
-    id: uid(), visitorId:m.id, name:m.name, status:m.status, reason:visitReason,
+    id: uid(), visitorId:m.id, name:m.name, status:m.status, reason:visitReason, type,
     photo: (S.scanCaptured && S.scanCaptured.photo) || m.photo,
     date: fmtDate(now), time: fmtTime(now), ts: now.getTime(),
     verifiedBy: S.username
@@ -979,9 +1008,10 @@ async function confirmLog(){
     return;
   }
   S.history.unshift(entry);
+  S.scanLoggedType = type;
   S.scanStatus = 'logged';
   render();
-  toast('บันทึกการเข้า-ออกเรียบร้อย');
+  toast(`บันทึก${logTypeLabel(type)}เรียบร้อย`);
 }
 
 /* =========================================================
@@ -1060,12 +1090,13 @@ function renderDbHistory(){
   </div>
   ${list.length===0 ? emptyState('ยังไม่มีประวัติการบันทึก') : `
   <table>
-    <thead><tr><th>#</th><th>ชื่อ-นามสกุล</th><th>สถานะ</th><th>เหตุผล</th><th>วันที่</th><th>เวลา</th><th>ผู้ยืนยัน</th></tr></thead>
+    <thead><tr><th>#</th><th>ชื่อ-นามสกุล</th><th>ประเภท</th><th>สถานะ</th><th>เหตุผล</th><th>วันที่</th><th>เวลา</th><th>ผู้ยืนยัน</th></tr></thead>
     <tbody>
       ${list.map((h,i)=>`
         <tr>
           <td style="color:var(--ink-faint); font-family:var(--font-mono);">${String(i+1).padStart(3,'0')}</td>
           <td>${esc(h.name)}</td>
+          <td><span class="status-pill ${h.type==='OUT'?'pill-out':'pill-in'}" style="padding:3px 10px;">${logTypeLabel(h.type||'IN')}</span></td>
           <td><span class="badge">${esc(h.status)}</span></td>
           <td style="color:var(--ink-dim);">${esc(h.reason||'-')}</td>
           <td style="font-family:var(--font-mono);">${esc(h.date)}</td>
@@ -1138,6 +1169,7 @@ function exportData(){
   const historyRows = S.history.map((h,i)=>({
     '#': i+1,
     'ชื่อ-นามสกุล': h.name,
+    'ประเภท': logTypeLabel(h.type||'IN'),
     'สถานะ': h.status,
     'เหตุผลในการเข้ามา': h.reason || '-',
     'วันที่': h.date,
